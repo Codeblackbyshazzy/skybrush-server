@@ -23,7 +23,7 @@ class GPSClockSynchronizationValidator:
     clock.
     """
 
-    _ubx_nav_timeutc_struct: ClassVar[Struct] = Struct("<12xHBBBBB")
+    _ubx_nav_timeutc_struct: ClassVar[Struct] = Struct("<8xiHBBBBB")
 
     sync_state_changed: Signal = Signal(
         doc=(
@@ -53,21 +53,37 @@ class GPSClockSynchronizationValidator:
         """
         self.are_clocks_in_sync = True
 
-    def notify(self, packet: GPSPacket) -> None:
+    def notify(self, packet: GPSPacket) -> float | None:
         """Notifies the clock synchronization validator about the arrival of a
         new packet from the GPS.
+
+        Args:
+            packet: the incoming GPS packet
+
+        Returns:
+            the parsed UTC timestamp as a UNIX timestamp in seconds if the
+            packet contained a valid U-blox NAV-TIMEUTC message; ``None``
+            otherwise
         """
         if (
             isinstance(packet, UBXPacket)
             and packet.class_id == UBXClass.NAV
             and packet.subclass_id == UBXNAVSubclass.TIMEUTC
         ):
-            self._handle_ubx_nav_timeutc(packet)
+            return self._handle_ubx_nav_timeutc(packet)
 
-    def _handle_ubx_nav_timeutc(self, packet: UBXPacket) -> None:
-        """Handles a NAV-TIMEUTC packet by parsing the UTC datetime and checking
-        whether it matches the current date/time on the computer running the
-        server.
+        return None
+
+    def _handle_ubx_nav_timeutc(self, packet: UBXPacket) -> float | None:
+        """Handles a NAV-TIMEUTC packet.
+
+        Parses the UTC datetime from the packet, converts it into a UNIX
+        timestamp in seconds, and checks whether it matches the current
+        date/time on the computer running the server.
+
+        Returns:
+            the parsed UTC timestamp as a UNIX timestamp in seconds if parsing
+            was successful; ``None`` otherwise
         """
         payload = packet.payload
         if len(payload) < 20:
@@ -80,12 +96,14 @@ class GPSClockSynchronizationValidator:
 
         try:
             struct = self._ubx_nav_timeutc_struct
-            year, month, day, hour, minute, second = struct.unpack(
+            nanosecond, year, month, day, hour, minute, second = struct.unpack(
                 payload[: struct.size]
             )
             dt = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
-            delta = dt - datetime.now(timezone.utc)
+            unix_timestamp: float = dt.timestamp() + nanosecond / 1_000_000_000
+            delta = unix_timestamp - datetime.now(timezone.utc).timestamp()
         except Exception:
-            return
+            return None
 
-        self.are_clocks_in_sync = delta.total_seconds() < 1
+        self.are_clocks_in_sync = abs(delta) < 1
+        return unix_timestamp
