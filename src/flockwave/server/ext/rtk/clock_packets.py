@@ -6,56 +6,20 @@ from datetime import datetime, timezone
 from struct import Struct
 from typing import ClassVar
 
-from blinker import Signal
 from flockwave.gps.ubx.enums import UBXClass, UBXNAVSubclass
 from flockwave.gps.ubx.packet import UBXPacket
 
 from .types import GPSPacket
 
 
-class GPSClockSynchronizationValidator:
-    """Class that validates whether the clock of the GPS is in sync with the
-    clock of the computer running the server.
-    """
-
-    _are_clocks_in_sync: bool = True
-    """Stores whether the server clock is assumed to be in sync with the GPS
-    clock.
-    """
+class GPSClockPacketParser:
+    """Class that attempts to parse UTC timestamp from incoming GPS packets."""
 
     _ubx_nav_timeutc_struct: ClassVar[Struct] = Struct("<8xiHBBBBB")
 
-    sync_state_changed: Signal = Signal(
-        doc=(
-            "Signal sent whenever the validator detects that the GPS clock is "
-            "out of sync with the server, or whenever sync is restored."
-        )
-    )
-
-    @property
-    def are_clocks_in_sync(self) -> bool:
-        """Returns whether the server clock is assumed to be in sync with the GPS
-        clock.
-        """
-        return self._are_clocks_in_sync
-
-    @are_clocks_in_sync.setter
-    def are_clocks_in_sync(self, value: bool) -> None:
-        if bool(value) == self._are_clocks_in_sync:
-            return
-
-        self._are_clocks_in_sync = bool(value)
-        self.sync_state_changed.send(self, in_sync=self._are_clocks_in_sync)
-
-    def assume_sync(self) -> None:
-        """Forces the validator to assume that the server clock and the GPS
-        clock are in sync.
-        """
-        self.are_clocks_in_sync = True
-
-    def notify(self, packet: GPSPacket) -> float | None:
+    def parse(self, packet: GPSPacket) -> float | None:
         """Notifies the clock synchronization validator about the arrival of a
-        new packet from the GPS.
+        new packet from the GPS and tries to parse the UTC timestamp from it.
 
         Args:
             packet: the incoming GPS packet
@@ -101,9 +65,7 @@ class GPSClockSynchronizationValidator:
             )
             dt = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
             unix_timestamp: float = dt.timestamp() + nanosecond / 1_000_000_000
-            delta = unix_timestamp - datetime.now(timezone.utc).timestamp()
         except Exception:
             return None
 
-        self.are_clocks_in_sync = abs(delta) < 1
         return unix_timestamp
