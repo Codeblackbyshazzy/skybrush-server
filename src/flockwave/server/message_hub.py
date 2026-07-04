@@ -12,7 +12,7 @@ from inspect import isawaitable
 from itertools import chain
 from logging import Logger
 from time import monotonic
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, Mapping, TypeVar, overload
 
 from flockwave.concurrency import AsyncBundler
 from flockwave.connections import ConnectionState
@@ -916,7 +916,7 @@ class MessageHub:
     @contextmanager
     def use_message_handlers(
         self,
-        handlers: dict[str, MessageHandler],
+        handlers: Mapping[str, MessageHandler],
         *,
         used_to_be_experimental: bool = False,
     ) -> Iterator[None]:
