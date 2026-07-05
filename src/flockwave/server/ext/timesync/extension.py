@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import Any, ContextManager, Protocol
 
 from flockwave.server.ext.base import Extension
+from flockwave.server.message_hub import MessageHub
+from flockwave.server.model.client import Client
 from flockwave.server.model.log import Severity
+from flockwave.server.model.messages import FlockwaveMessage, FlockwaveResponse
 
 from .constants import (
     DEFAULT_OFFSET_LOG_THRESHOLD,
@@ -65,6 +69,21 @@ class TimeSyncExtension(Extension):
         """Returns the current synchronization status snapshot."""
         return self._manager.get_status()
 
+    def _create_timesync_status_message_body(
+        self, snapshot: TimeSyncSnapshot | None = None
+    ) -> dict[str, Any]:
+        """Creates a message describing the current synchronization status."""
+        snapshot = snapshot or self._manager.get_status()
+        return {"type": "TIMESYNC-STATUS", "status": snapshot.json}
+
+    def _handle_TIMESYNC_STATUS(
+        self, message: FlockwaveMessage, sender: Client, hub: MessageHub
+    ) -> FlockwaveResponse:
+        """Handles a request for the current synchronization status."""
+        return hub.create_response_to(
+            message, self._create_timesync_status_message_body()
+        )
+
     def use_time_source(
         self, id: str, *, priority: int = 0
     ) -> ContextManager[TimeSource]:
@@ -72,9 +91,19 @@ class TimeSyncExtension(Extension):
         return self._manager.use_time_source(id, priority=priority)
 
     async def run(self) -> None:
-        with self._manager.sync_status_changed.connected_to(
-            self._maybe_send_status_change_message, sender=self._manager
-        ):
+        assert self.app is not None
+
+        handler_map = {
+            "TIMESYNC-STATUS": self._handle_TIMESYNC_STATUS,
+        }
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                self._manager.sync_status_changed.connected_to(
+                    self._maybe_send_status_change_message, sender=self._manager
+                )
+            )
+            stack.enter_context(self.app.message_hub.use_message_handlers(handler_map))
             await self._manager.run()
 
     def _maybe_send_status_change_message(
@@ -92,6 +121,12 @@ class TimeSyncExtension(Extension):
             # Don't send a message when the server starts up and the first time source
             # reports a valid timestamp, because that is expected behavior.
             return
+
+        message_hub = self.app.message_hub
+
+        body = self._create_timesync_status_message_body(current)
+        notification = message_hub.create_notification(body)
+        self.app.message_hub.enqueue_broadcast_message(notification)
 
         send_message = self.app.request_to_send_SYS_MSG_message
         match current.state:

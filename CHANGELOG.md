@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [main]
 
+### Added
+
+- Added `timesync` extension that contains the core logic for determining whether the
+  clock of the server is in sync with the world clock. Other extensions may register
+  themselves as time sources in the `timesync` extension and submit world clock
+  timestamps or estimated offsets, while the `timesync` extension takes care of
+  maintaining a global time synchronization state and informing clients if the clock
+  seems to be not in sync with the world clock.
+
 ### Changed
 
 - When MAVLink drones are waiting on the ground before a show, the start time of the
@@ -17,11 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Increased maximum WebSocket message size to 100 MB by default.
 
+- The `rtk` extension now uses the facilities provided by the `timesync` extension to
+  allow GPS packet timestamps to be used as world clock time estimates.
+
 ### Fixed
 
 - Encoding of log files is now always UTF-8, irrespectively of the native file encoding
   of the current platform. This is to ensure that UTF-8 characters are printed properly
   in log files on Windows instead of dumping an error on the console.
+
+### Deprecated
+
+- In earlier versions, `SYS-MSG` messages were emitted when the server determined that
+  its local clock is probably not in sync with GPS time. These messages are now
+  deprecated and will _not_ be emitted from the next minor version. Clients should
+  update to use the newly added `TIMESYNC-STATUS` message instead, which provides more
+  detailed information about the time synchronization state of the server.
 
 ## [2.47.1] - 2026-06-20
 

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any
+from typing import TypedDict
 
 from .types import TimeSyncState
 
-__all__ = ("TimeSyncSnapshot", "TimeSourceRecord")
+__all__ = ("TimeSyncSnapshot", "TimeSyncSnapshotDict", "TimeSourceRecord")
 
 
 @dataclass(frozen=True)
@@ -33,7 +35,7 @@ class TimeSyncSnapshot:
         return self.state == "sync"
 
     @property
-    def json(self) -> dict[str, Any]:
+    def json(self) -> TimeSyncSnapshotDict:
         """Returns the snapshot in a JSON-serializable representation."""
         return {
             "state": self.state,
@@ -41,6 +43,15 @@ class TimeSyncSnapshot:
             "offset": self.offset,
             "jitter": self.jitter,
         }
+
+
+class TimeSyncSnapshotDict(TypedDict):
+    """JSON-serializable representation of a time synchronization snapshot."""
+
+    state: TimeSyncState
+    source: str | None
+    offset: float | None
+    jitter: float | None
 
 
 @dataclass
