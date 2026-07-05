@@ -9,6 +9,7 @@ from time import monotonic, time
 from typing import ClassVar
 
 from blinker import Signal
+from trio import BrokenResourceError
 from trio_util import periodic
 
 from .constants import (
@@ -219,7 +220,14 @@ class TimeSyncManager:
     def unregister_time_source(self, id: str) -> None:
         """Unregisters a previously registered time source."""
         self._sources.pop(id, None)
-        self.refresh_status()
+
+        try:
+            self.refresh_status()
+        except BrokenResourceError:
+            # This may happen if the server is shutting down because refresh_status()
+            # might send a time sync status change signal, which may in turn prompt the
+            # server to send a TIMESYNC-STATUS notification to clients.
+            pass
 
     @contextmanager
     def use_time_source(self, id: str, *, priority: int = 0) -> Iterator[TimeSource]:
@@ -337,11 +345,6 @@ class TimeSyncManager:
                     "Cannot determine server clock synchronization state: "
                     "all reporting time sources indicated errors"
                 )
-            case _:
-                self._log.info(
-                    "Cannot determine server clock synchronization state: "
-                    "no recent timestamp is available"
-                )
 
     def _update_source_from_measurement(
         self,
@@ -368,8 +371,10 @@ class TimeSyncManager:
 
         source.last_event_at_monotonic = now_monotonic
         source.last_success_at_monotonic = now_monotonic
-        source.last_reported_jitter = float(jitter) if jitter is not None else None
-        source.last_reported_offset = float(offset)
+        source.last_reported_jitter = (
+            round(float(jitter), 3) if jitter is not None else None
+        )
+        source.last_reported_offset = round(float(offset), 3)
         source.last_error = None
         self.refresh_status()
 
