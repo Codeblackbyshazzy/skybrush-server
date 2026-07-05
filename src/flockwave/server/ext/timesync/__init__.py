@@ -6,7 +6,6 @@ from .extension import (
     TimeSource,
     TimeSyncExtension,
     TimeSyncExtensionAPI,
-    TimeSyncManager,
     TimeSyncSnapshot,
     TimeSyncState,
 )
@@ -15,7 +14,6 @@ from .schema import schema
 __all__ = (
     "TimeSource",
     "TimeSyncExtensionAPI",
-    "TimeSyncManager",
     "TimeSyncSnapshot",
     "TimeSyncState",
     "construct",
