@@ -2,7 +2,7 @@ from typing import Any
 
 from pytest import approx
 
-from flockwave.server.ext.timesync import TimeSyncManager
+from flockwave.server.ext.timesync.manager import TimeSyncManager
 
 
 class MockClock:

@@ -346,6 +346,13 @@ class TimeSyncManager:
                     "all reporting time sources indicated errors"
                 )
 
+            case _:
+                if self._sources:
+                    self._log.info(
+                        "Cannot determine server clock synchronization state: "
+                        "no recent timestamp is available"
+                    )
+
     def _update_source_from_measurement(
         self,
         id: str,
