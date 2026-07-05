@@ -1011,7 +1011,7 @@ wheels = [
 
 [[package]]
 name = "flockwave-server"
-version = "2.47.1"
+version = "2.48.0"
 source = { editable = "." }
 dependencies = [
     { name = "adrenaline" },
@@ -1210,6 +1210,7 @@ dependencies = [
     { name = "jsonpointer" },
     { name = "jsonref" },
 ]
+sdist = { url = "https://pypi.fury.io/skybrush/-/ver_x7HlK/flockwave-spec-2.9.0.tar.gz", hash = "sha256:a21013bd632f8af2472bb67a3b14f4259ce160c4a4d165e3d790ae1c359b14f9" }
 wheels = [
     { url = "https://pypi.fury.io/skybrush/-/ver_2l2PfL/flockwave_spec-2.9.0-py3-none-any.whl", hash = "sha256:3a11f1dbc559c67110f4b929c336a71483238c773408476fff9104f766e383d6" },
 ]
