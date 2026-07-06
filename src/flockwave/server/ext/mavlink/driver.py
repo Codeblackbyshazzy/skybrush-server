@@ -1765,9 +1765,10 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
                 Color(name)
                 for name in "red lime blue yellow cyan magenta white".split()
             ]
-            for color in color_sequence:
+            for index, color in enumerate(color_sequence):
+                if index > 0:
+                    await sleep(1)
                 await self.set_led_color(color, channel=channel, duration=2)
-                await sleep(1)
 
         elif component == "pyro":
             await self.start_pyro_test()
