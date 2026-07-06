@@ -286,15 +286,23 @@ class VirtualUAV(UAVBase):
         """
         match component:
             case "compass":
+                if self._state != VirtualUAVState.LANDED:
+                    raise RuntimeError(f"Cannot calibrate {component} while flying")
                 for i in range(10):
                     yield Progress(percentage=i * 10)
                     await sleep(0.5 + random() * 1.5)
-
-                yield Progress(percentage=100)
-            case "accel" | "baro" | "gyro" | "level":
+            case "baro" | "gyro" | "level":
+                if self._state != VirtualUAVState.LANDED:
+                    raise RuntimeError(f"Cannot calibrate {component} while flying")
+                yield Progress(percentage=0)
+                self._position_xyz.z = 0
+                await sleep(1)
+            case "accel":
                 raise NotImplementedError
             case _:
                 raise NotSupportedError
+
+        yield Progress(percentage=100)
 
         # TODO: Dynamically set preflight results and implement other components
 
@@ -499,12 +507,15 @@ class VirtualUAV(UAVBase):
             flat_earth = FlatEarthCoordinate(x=x, y=y, amsl=amsl, ahl=z)
             self.target = self._trans.to_gps(flat_earth)
 
-    async def test_component(self, component: str):
+    async def test_component(self, component: str) -> None:
         """Tests a component of the UAV.
 
         Parameters:
             component: the component to test; currently we support ``motor`` and
                 ``led``
+
+        Raises:
+            NotSupportedError: if the given component test is not supported
         """
         if component == "motor":
             self.start_motors()
@@ -519,9 +530,7 @@ class VirtualUAV(UAVBase):
                 if index > 0:
                     await sleep(1)
                 self.set_led_color(color)
-                yield Progress(
-                    percentage=int((index + 1) * (100 / len(color_sequence)))
-                )
+
         else:
             raise NotSupportedError
 

@@ -1737,6 +1737,9 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
             component: the component to test; currently we support ``camera``,
                 ``led``, ``motor`` and ``pyro``
             channel: the communication channel to use when sending the command
+
+        Raises:
+            NotSupportedError: if the given component test is not supported
         """
         if component == "motor":
             # Older versions of ArduCopter did not support the motor count

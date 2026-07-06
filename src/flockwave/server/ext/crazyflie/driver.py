@@ -1012,6 +1012,9 @@ class CrazyflieUAV(UAVBase):
         Parameters:
             component: the component to test; currently we support ``motor``,
                 ``battery`` and ``led``
+
+        Raises:
+            NotSupportedError: if the given component test is not supported
         """
         if component == "motor":
             await self.set_parameter("health.startPropTest", 1)
