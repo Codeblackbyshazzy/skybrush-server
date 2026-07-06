@@ -514,9 +514,6 @@ class VirtualUAV(UAVBase):
             component: the component to test; currently we support ``motor`` and
                 ``led``
 
-        Yields:
-            progress information about the test
-
         Raises:
             NotSupportedError: if the given component test is not supported
         """
