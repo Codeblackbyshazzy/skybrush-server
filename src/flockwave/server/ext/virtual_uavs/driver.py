@@ -507,7 +507,7 @@ class VirtualUAV(UAVBase):
             flat_earth = FlatEarthCoordinate(x=x, y=y, amsl=amsl, ahl=z)
             self.target = self._trans.to_gps(flat_earth)
 
-    async def test_component(self, component: str) -> ProgressEvents[str]:
+    async def test_component(self, component: str) -> None:
         """Tests a component of the UAV.
 
         Parameters:
@@ -518,13 +518,11 @@ class VirtualUAV(UAVBase):
             progress information about the test
 
         Raises:
-            NotSupportedError if the given component test is not supported
+            NotSupportedError: if the given component test is not supported
         """
         if component == "motor":
             self.start_motors()
-            for i in range(4):
-                yield Progress(percentage=i * 25)
-                await sleep(1)
+            await sleep(3)
             self.stop_motors()
         elif component == "led":
             color_sequence = [
@@ -532,14 +530,12 @@ class VirtualUAV(UAVBase):
                 for name in "red lime blue yellow cyan magenta white".split()
             ]
             for index, color in enumerate(color_sequence):
-                yield Progress(percentage=int(index * (100 / len(color_sequence))))
+                if index > 0:
+                    await sleep(1)
                 self.set_led_color(color)
-                await sleep(1)
 
         else:
             raise NotSupportedError
-
-        yield Progress(percentage=100)
 
     @property
     def user_defined_error(self) -> int | None:

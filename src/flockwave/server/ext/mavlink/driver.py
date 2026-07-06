@@ -1730,7 +1730,7 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
 
     async def test_component(
         self, component: str, *, channel: str = Channel.PRIMARY
-    ) -> ProgressEvents[str]:
+    ) -> None:
         """Tests a component of the UAV.
 
         Parameters:
@@ -1738,11 +1738,8 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
                 ``led``, ``motor`` and ``pyro``
             channel: the communication channel to use when sending the command
 
-        Yields:
-            progress information about the test
-
         Raises:
-            NotSupportedError if the given component test is not supported
+            NotSupportedError: if the given component test is not supported
         """
         if component == "motor":
             # Older versions of ArduCopter did not support the motor count
@@ -1750,7 +1747,6 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
             heartbeat = self.get_last_message(MAVMessageType.HEARTBEAT)
             motor_count = 4 if not heartbeat else MAVType(heartbeat.type).motor_count
             for i in range(motor_count):
-                yield Progress(percentage=int(i * (100 / motor_count)))
                 await self.driver.send_command_long(
                     self,
                     MAVCommand.DO_MOTOR_TEST,
@@ -1769,23 +1765,18 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
                 Color(name)
                 for name in "red lime blue yellow cyan magenta white".split()
             ]
-            for index, color in enumerate(color_sequence):
-                yield Progress(percentage=int(index * (100 / len(color_sequence))))
+            for color in color_sequence:
                 await self.set_led_color(color, channel=channel, duration=2)
                 await sleep(1)
 
         elif component == "pyro":
-            yield Progress(percentage=0)
             await self.start_pyro_test()
 
         elif component == "camera":
-            yield Progress(percentage=0)
             await self.trigger_camera_shutter()
 
         else:
             raise NotSupportedError
-
-        yield Progress(percentage=100)
 
     async def handle_firmware_update(
         self, target_id: str, blob: bytes
