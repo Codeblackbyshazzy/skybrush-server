@@ -13,13 +13,13 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from heapq import heapify, heappush
+from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from flockwave.ext.manager import ExtensionManager
 from flockwave.networking import can_bind_to_tcp_address, format_socket_address
 from hypercorn.config import Config as HyperConfig
-from hypercorn.logging import Logger
 from hypercorn.trio import serve
 from quart import Blueprint, Quart, abort, redirect, request, url_for
 from quart_trio import QuartTrio
@@ -263,7 +263,7 @@ async def run(app: SkybrushServer, configuration: dict[str, Any], logger: Logger
 
     address = exports.get("address")
     if address is None:
-        logger.warn("HTTP server address is not specified in configuration")
+        logger.warning("HTTP server address is not specified in configuration")
         return
 
     host, port = address
@@ -284,7 +284,7 @@ async def run(app: SkybrushServer, configuration: dict[str, Any], logger: Logger
             if startup_delay < 0:
                 raise ValueError
         except ValueError:
-            logger.warn(f"Ignoring invalid startup delay: {maybe_startup_delay!r}")
+            logger.warning(f"Ignoring invalid startup delay: {maybe_startup_delay!r}")
 
     # Don't show info messages by default (unless the app is in debug mode),
     # show warnings and errors only
@@ -300,6 +300,14 @@ async def run(app: SkybrushServer, configuration: dict[str, Any], logger: Logger
     config.errorlog = server_log
     config.keyfile = configuration.get("keyfile") or None
     config.use_reloader = False
+
+    config.websocket_max_message_size = int(
+        configuration.get("websocket_max_message_size", 100 * 1024 * 1024)
+    )
+    logger.debug(
+        f"WebSocket maximum message size is set to "
+        f"{config.websocket_max_message_size // 1024 // 1024} MB"
+    )
 
     secure = bool(config.ssl_enabled)
 
@@ -403,13 +411,26 @@ schema = {
         "certfile": {
             "type": "string",
             "title": "Certificate file",
-            "description": "Full path to the certificate file that the server should use for HTTPS connections",
+            "description": (
+                "Full path to the certificate file that the server should use for "
+                "HTTPS connections"
+            ),
             "required": False,
         },
         "keyfile": {
             "type": "string",
             "title": "Private key file",
             "description": "Full path to the private key file corresopnding to the certificate",
+            "required": False,
+        },
+        "websocket_max_message_size": {
+            "type": "integer",
+            "title": "Max WebSocket message size",
+            "description": (
+                "Maximum size of a single WebSocket message in bytes. Used only for "
+                "clients that connect to the server via WebSocket."
+            ),
+            "default": 104857600,
             "required": False,
         },
     }

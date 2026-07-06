@@ -31,6 +31,7 @@ from trio_util import AsyncBool, periodic
 
 from flockwave.server.ext.base import Extension
 from flockwave.server.ext.signals import SignalsExtensionAPI
+from flockwave.server.ext.timesync import TimeSource, TimeSyncExtensionAPI
 from flockwave.server.message_handlers import (
     create_mapper,
     create_multi_object_message_handler,
@@ -38,7 +39,6 @@ from flockwave.server.message_handlers import (
 )
 from flockwave.server.message_hub import MessageHub
 from flockwave.server.model import ConnectionPurpose, default_id_generator
-from flockwave.server.model.log import Severity
 from flockwave.server.model.messages import FlockwaveMessage, FlockwaveResponse
 from flockwave.server.registries import find_in_registry
 from flockwave.server.utils import overridden
@@ -51,7 +51,7 @@ from flockwave.server.utils.serial import (
 )
 
 from .beacon_manager import RTKBeaconManager
-from .clock_sync import GPSClockSynchronizationValidator
+from .clock_packets import GPSClockPacketParser
 from .enums import MessageSet, RTKConfigurationPresetType
 from .preset import (
     ALLOWED_FORMATS,
@@ -88,7 +88,14 @@ class RTKExtension(Extension):
 
     RTK_PACKET_SIGNAL: ClassVar[str] = "rtk:packet"
 
-    _clock_sync_validator: GPSClockSynchronizationValidator
+    TIMESYNC_SOURCE_PRIORITY: ClassVar[int] = 100
+    """Priority value of the RTK time source in the time synchronization extension.
+    We use a relatively high priority as the delay between the emission and the
+    reception of an RTK packet is unknown so the timestamp that we can provide to
+    the timesync extension is not very accurate.
+    """
+
+    _clock_packet_parser: GPSClockPacketParser
     _current_preset: RTKConfigurationPreset | None = None
     _custom_user_presets_file: str = ""
     _dynamic_serial_port_configurations: list[SerialPortConfiguration]
@@ -114,7 +121,7 @@ class RTKExtension(Extension):
         self._dynamic_serial_port_filters = []
         self._presets = []
 
-        self._clock_sync_validator = GPSClockSynchronizationValidator()
+        self._clock_packet_parser = GPSClockPacketParser()
         self._rtk_beacon_manager = RTKBeaconManager()
         self._statistics = RTKStatistics()
         self._survey_settings = RTKSurveySettings()
@@ -546,9 +553,12 @@ class RTKExtension(Extension):
             raise RuntimeError("Only user-defined presets can be deleted")
 
         if callable(updates):
-            updates = updates(preset)
+            resolved_updates = cast(dict[str, Any], updates(preset))  # ty:ignore[call-top-callable]
+        else:
+            resolved_updates = updates
 
-        preset.update_from(updates)
+        preset.update_from(resolved_updates)
+
         return True
 
     @property
@@ -682,7 +692,6 @@ class RTKExtension(Extension):
                     self.log.error(
                         f"Parse error while reading user presets from {str(user_preset_file)!r}"
                     )
-
         self._load_presets_from(user_presets, type=RTKConfigurationPresetType.USER)
 
     def _save_user_presets(self) -> None:
@@ -696,6 +705,9 @@ class RTKExtension(Extension):
             if self._registry.find_by_id(preset_id).type
             is RTKConfigurationPresetType.USER
         }
+
+        if not user_preset_file.parent.exists():
+            user_preset_file.parent.mkdir(parents=True, exist_ok=True)
 
         with user_preset_file.open("w") as fp:
             try:
@@ -841,21 +853,21 @@ class RTKExtension(Extension):
         """
         assert self.app is not None
 
-        self._clock_sync_validator.assume_sync()
-
         with ExitStack() as stack:
             assert self._rtk_survey_trigger is not None
             assert self.app is not None
 
+            timesync = self.app.import_api("timesync", TimeSyncExtensionAPI)
+            timesync_source = stack.enter_context(
+                timesync.use_time_source(
+                    "rtk",
+                    priority=self.TIMESYNC_SOURCE_PRIORITY,
+                )
+            )
+
             async with open_nursery() as nursery:
                 stack.enter_context(self._statistics.use())
                 stack.enter_context(self._rtk_beacon_manager.use(self, nursery))
-                stack.enter_context(
-                    self._clock_sync_validator.sync_state_changed.connected_to(
-                        self._on_gps_clock_sync_state_changed,
-                        sender=self._clock_sync_validator,
-                    )
-                )
 
                 self._rtk_survey_trigger.value = preset.auto_survey
 
@@ -885,6 +897,7 @@ class RTKExtension(Extension):
                                 task=partial(
                                     self._run_single_connection_for_preset,
                                     preset=preset,
+                                    timesync_source=timesync_source,
                                 ),
                             )
                         )
@@ -916,7 +929,11 @@ class RTKExtension(Extension):
                         )
 
     async def _run_single_connection_for_preset(
-        self, connection: RWConnection[bytes, bytes], *, preset: RTKConfigurationPreset
+        self,
+        connection: RWConnection[bytes, bytes],
+        *,
+        preset: RTKConfigurationPreset,
+        timesync_source: TimeSource,
     ) -> None:
         """Task that reads messages from a single connection related to an
         RTK preset.
@@ -936,7 +953,10 @@ class RTKExtension(Extension):
             async for packet in channel:
                 accepted = preset.accepts(packet) and self._message_set.accepts(packet)
 
-                self._clock_sync_validator.notify(packet)
+                unix_timestamp = self._clock_packet_parser.parse(packet)
+                if unix_timestamp is not None:
+                    timesync_source.submit_timestamp(unix_timestamp)
+
                 self._statistics.notify(packet, forwarded=accepted)
 
                 if accepted:
@@ -979,23 +999,6 @@ class RTKExtension(Extension):
                     nursery.start_soon(handle_incoming_packets)
             else:
                 await handle_incoming_packets()
-
-    def _on_gps_clock_sync_state_changed(self, sender, in_sync: bool) -> None:
-        """Handler called when the extension detects that the GPS clock is
-        out of sync with the server, or when the clocks are in sync again.
-        """
-        if not self.app:
-            return
-
-        send_message = self.app.request_to_send_SYS_MSG_message
-        if in_sync:
-            send_message("GPS clock and server clock are now in sync.")
-        else:
-            send_message(
-                "Server clock is not synchronized to GPS clock. Please sync "
-                "the date and time on the server to a reliable time source.",
-                severity=Severity.WARNING,
-            )
 
     def _on_hotplug_event(self, sender, event) -> None:
         """Handler called for hotplug events. Used to trigger the regeneration
@@ -1112,7 +1115,7 @@ class RTKExtension(Extension):
 
 
 construct = RTKExtension
-dependencies = ("beacon", "location", "ntrip", "signals")
+dependencies = ("beacon", "location", "ntrip", "signals", "timesync")
 description = "Support for RTK base stations and external RTK correction sources"
 optional_dependencies = {
     "hotplug": "detects when new USB devices are plugged in and updates the RTK sources automatically",
@@ -1202,6 +1205,11 @@ def get_schema():
             # user to mess with the location of the presets file by default,
             # but it is useful to us in certain deployments. Use it at your
             # own risk.
+            # "presets_file": {
+            #     "type": "string",
+            #     "title": "RTK presets file",
+            #     "description": "Optional JSON file path to store user-defined RTK presets."
+            # },
             "add_serial_ports": {
                 "title": "Use serial ports automatically",
                 "description": (

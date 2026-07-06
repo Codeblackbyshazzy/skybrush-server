@@ -95,6 +95,8 @@ EXTENSIONS = {
     "studio": {},  # used to trigger auto-loading when the license is installed
     "system_clock": {},
     "tcp": {},
+    "timesync": {},
+    "timesync_ntp": {},  # used to trigger auto-loading when the license is installed
     "udp": {},
     "virtual_uavs": {
         "arm_after_boot": True,

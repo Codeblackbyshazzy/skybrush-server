@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 from itertools import islice
 from operator import mul
-from typing import Any, TypeVar
+from typing import Any, Generic, ParamSpec, Protocol, TypeVar, cast
 
 from colour import Color
 
@@ -35,10 +35,11 @@ __all__ = (
 )
 
 
+P = ParamSpec("P")
 T = TypeVar("T")
 
 
-def chunks(it: Iterable[T], size: int) -> Iterator[tuple[T]]:
+def chunks(it: Iterable[T], size: int) -> Iterator[tuple[T, ...]]:
     """Takes an iterator or iterable and returns an iterator that yields chunks
     of at most the given size from the input.
     """
@@ -80,9 +81,6 @@ def color_to_rgb8_triplet(color: Color) -> tuple[int, int, int]:
         the color in its RGB8 triplet representation
     """
     return tuple(round(x * 255) for x in color.rgb)
-
-
-T = TypeVar("T")
 
 
 def consecutive_pairs(
@@ -164,7 +162,7 @@ def divide_by(value: float) -> Callable[[float], float]:
     """Returns a function that divides every number received as an input
     with the given value.
     """
-    return partial(mul, 1.0 / value)
+    return cast(Callable[[float], float], partial(mul, 1.0 / value))
 
 
 def identity(obj: Any) -> Any:
@@ -209,7 +207,7 @@ def longest_common_prefix(strings: Sequence[str]) -> str:
     if not strings:
         return ""
 
-    shortest_string: str = min(strings, key=len)  # ty:ignore[invalid-assignment]
+    shortest_string: str = min(strings, key=len)
     for i, char in enumerate(shortest_string):
         for other in strings:
             if other[i] != char:
@@ -229,7 +227,7 @@ def multiply_by(term: float) -> Callable[[float], float]:
     """Returns a function that multiplies every number received as an input
     with the given term.
     """
-    return partial(mul, term)
+    return cast(Callable[[float], float], partial(mul, term))
 
 
 def nop(*args, **kwds):
@@ -239,19 +237,27 @@ def nop(*args, **kwds):
     pass
 
 
-def once(func):
+class OnceCallable(Generic[P, T], Protocol):
+    def __call__(self, *args: P.args, **kwds: P.kwargs) -> T: ...
+
+    called: bool
+
+
+def once(func: Callable[P, T]) -> Callable[P, T]:
     """Decorator that decorates a function and allows it to be called only
     once. Subsequent attempts to call the function will throw an exception.
     """
 
-    def wrapped(*args, **kwds):
-        if wrapped.called:
-            raise RuntimeError("{!r} can be called only once".format(func))
+    wrapped: OnceCallable[P, T]
 
-        wrapped.called = True
+    def wrapped(*args: P.args, **kwds: P.kwargs) -> T:
+        if wrapped.called:  # ty:ignore[unresolved-attribute]
+            raise RuntimeError(f"{func!r} can be called only once")
+
+        wrapped.called = True  # ty:ignore[invalid-assignment]
         return func(*args, **kwds)
 
-    wrapped.called = False
+    wrapped.called = False  # ty:ignore[unresolved-attribute]
     return wrapped
 
 

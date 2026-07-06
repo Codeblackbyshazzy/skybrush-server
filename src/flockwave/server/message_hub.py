@@ -12,7 +12,7 @@ from inspect import isawaitable
 from itertools import chain
 from logging import Logger
 from time import monotonic
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, Mapping, TypeVar, overload
 
 from flockwave.concurrency import AsyncBundler
 from flockwave.connections import ConnectionState
@@ -623,7 +623,7 @@ class MessageHub:
                 # ordering constraints; e.g., async operation notifications
                 # must be sent later than the initial responses because the
                 # latter contain the receipt IDs that the former ones refer to).
-                self.enqueue_message(response, to=sender, in_response_to=message)
+                self.enqueue_message(response, to=sender, in_response_to=message)  # ty:ignore[invalid-argument-type]
                 handled = True
 
         return handled
@@ -916,7 +916,7 @@ class MessageHub:
     @contextmanager
     def use_message_handlers(
         self,
-        handlers: dict[str, MessageHandler],
+        handlers: Mapping[str, MessageHandler],
         *,
         used_to_be_experimental: bool = False,
     ) -> Iterator[None]:
@@ -1102,8 +1102,8 @@ class MessageHub:
                     "Error while sending message to client", extra={"id": client.id}
                 )
             else:
-                if hasattr(message, "_notify_sent"):
-                    message._notify_sent()  # type: ignore
+                if isinstance(message, FlockwaveResponse):
+                    await message._notify_sent()
 
         if done:
             done()

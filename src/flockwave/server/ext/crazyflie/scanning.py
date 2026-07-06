@@ -4,7 +4,7 @@ of a Crazyflie address space for Crazyflie drones.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable, Callable, Iterable
+from collections.abc import AsyncGenerator, AsyncIterable, Callable, Iterable
 from contextlib import aclosing
 from errno import ENODEV
 from functools import partial
@@ -45,7 +45,7 @@ class Scheduler:
 
     async def run(
         self, addresses: CrazyradioConnection | AddressListGetter
-    ) -> AsyncIterable[list[str] | None]:
+    ) -> AsyncGenerator[list[str] | None]:
         """Runs the scheduler, yielding lists of addresses to scan, or yielding
         `None` when a full scan is requested.
 

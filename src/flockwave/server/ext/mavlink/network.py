@@ -17,16 +17,17 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator, Sequence
 from contextlib import ExitStack, contextmanager
 from logging import Logger
 from time import time_ns
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from flockwave.concurrency import Future, race
 from flockwave.connections import (
+    BroadcastAddressOverride,
     Connection,
+    IPAddressAndPort,
     ListenerConnection,
-    UDPListenerConnection,
     create_connection,
 )
-from flockwave.networking import find_interfaces_with_address
+from flockwave.networking import find_interfaces_with_address, format_socket_address
 from trio import move_on_after, open_nursery, to_thread
 from trio.abc import ReceiveChannel
 from trio_util import periodic
@@ -55,7 +56,6 @@ from .types import (
     MAVLinkMessageSpecification,
     MAVLinkNetworkSpecification,
     MAVLinkStatusTextTargetSpecification,
-    spec,
 )
 from .utils import (
     flockwave_severity_from_mavlink_severity,
@@ -476,38 +476,12 @@ class MAVLinkNetwork:
         """
         await self.manager.broadcast_packet(spec, destination=channel)
 
-    def enqueue_rc_override_packet(self, channels: list[int]) -> None:
-        """Handles a list of a RC channels that the server wishes to forward
-        to the drones as RC override.
-
-        Parameters:
-            channels: the values of the RC channels to send in a MAVLink
-                `RC_CHANNELS_OVERRIDE` message
+    def enqueue_rc_override_packet(self, spec: MAVLinkMessageSpecification) -> None:
+        """Enqueues a message containing a MAVLink RC override packet to the network,
+        handling failures gracefully.
         """
-        message = spec.rc_channels_override(
-            target_system=0,
-            target_component=0,
-            chan1_raw=channels[0],
-            chan2_raw=channels[1],
-            chan3_raw=channels[2],
-            chan4_raw=channels[3],
-            chan5_raw=channels[4],
-            chan6_raw=channels[5],
-            chan7_raw=channels[6],
-            chan8_raw=channels[7],
-            chan9_raw=channels[8],
-            chan10_raw=channels[9],
-            chan11_raw=channels[10],
-            chan12_raw=channels[11],
-            chan13_raw=channels[12],
-            chan14_raw=channels[13],
-            chan15_raw=channels[14],
-            chan16_raw=channels[15],
-            chan17_raw=channels[16],
-            chan18_raw=channels[17],
-        )
         self.manager.enqueue_broadcast_packet(
-            message, destination=Channel.RC, allow_failure=True
+            spec, destination=Channel.RC, allow_failure=True
         )
 
     def enqueue_rtk_correction_packet(self, packet: bytes) -> None:
@@ -796,6 +770,7 @@ class MAVLinkNetwork:
         handlers = {
             "AUTOPILOT_VERSION": self._handle_message_autopilot_version,
             "BAD_DATA": nop,
+            "BATTERY_STATUS": self._handle_message_battery_status,
             "COMMAND_ACK": nop,
             "COMMAND_LONG": self._handle_message_command_long,
             "DATA16": self._handle_message_data,
@@ -826,6 +801,9 @@ class MAVLinkNetwork:
             "POSITION_TARGET_GLOBAL_INT": nop,
             "POWER_STATUS": nop,
             "RADIO_STATUS": radio_status_handler,
+            "SCALED_IMU": self._handle_message_scaled_imu,  # common handler for all IMUs
+            "SCALED_IMU2": self._handle_message_scaled_imu,  # common handler for all IMUs
+            "SCALED_IMU3": self._handle_message_scaled_imu,  # common handler for all IMUs
             "STATUSTEXT": self._handle_message_statustext,
             "SYS_STATUS": self._handle_message_sys_status,
             "TIMESYNC": self._handle_message_timesync,
@@ -886,7 +864,7 @@ class MAVLinkNetwork:
                     # the future twice
                     continue
                 elif callable(params):
-                    matched = params(message)
+                    matched = params(message)  # ty:ignore[call-top-callable]
                 elif params is None:
                     matched = True
                 else:
@@ -919,6 +897,14 @@ class MAVLinkNetwork:
         uav = self._find_uav_from_message(message, address)
         if uav:
             uav.handle_message_autopilot_version(message)
+
+    def _handle_message_battery_status(
+        self, message: MAVLinkMessage, *, connection_id: str, address: Any
+    ):
+        """Handles an incoming MAVLink BATTERY_STATUS message."""
+        uav = self._find_uav_from_message(message, address)
+        if uav:
+            uav.handle_message_battery_status(message)
 
     def _handle_message_command_long(
         self, message: MAVLinkMessage, *, connection_id: str, address: Any
@@ -1002,6 +988,14 @@ class MAVLinkNetwork:
         uav = self._find_uav_from_message(message, address)
         if uav:
             uav.handle_message_radio_status(message)
+
+    def _handle_message_scaled_imu(
+        self, message: MAVLinkMessage, *, connection_id: str, address: Any
+    ):
+        """Handles an incoming MAVLink SCALED_IMU, SCALED_IMU2 or SCALED_IMU3 message."""
+        uav = self._find_uav_from_message(message, address)
+        if uav:
+            uav.handle_message_scaled_imu(message)
 
     def _handle_message_statustext(
         self, message: MAVLinkMessage, *, connection_id: str, address: Any
@@ -1176,56 +1170,63 @@ class MAVLinkNetwork:
         with move_on_after(timeout):
             subnets = await to_thread.run_sync(find_interfaces_with_address, ip)
 
+        if not subnets:
+            self.log.warning(
+                f"Failed to update broadcast address to a subnet-specific one: no "
+                f"subnets found for address: {format_socket_address(address)}"
+            )
+            return
+
         success = False
-        if subnets:
-            interface, subnet = subnets[0]
-            # HACK HACK HACK this is an ugly temporary fix; we are reaching into
-            # the internals of self.manager, which we shouldn't do
-            for entries in self.manager._entries_by_name.values():
-                for entry in entries:
-                    if entry.channel and entry.name == connection_id:
-                        broadcast_address = subnet.broadcast_address
-                        if str(broadcast_address) == "127.255.255.255":
-                            # We are on localhost, so just keep on using localhost
-                            broadcast_address = "127.0.0.1"
+        interface, subnet = subnets[0]
+        # HACK HACK HACK this is an ugly temporary fix; we are reaching into
+        # the internals of self.manager, which we shouldn't do
+        for entries in self.manager._entries_by_name.values():
+            for entry in entries:
+                if entry.channel and entry.name == connection_id:
+                    broadcast_address = subnet.broadcast_address
+                    if str(broadcast_address) == "127.255.255.255":
+                        # We are on localhost, so just keep on using localhost
+                        broadcast_address = "127.0.0.1"
 
-                        # Try to figure out the current broadcast address of the channel
-                        # TODO(ntamas): this should be sorted out in the future
-                        old_broadcast_address = getattr(
-                            entry.channel, "broadcast_address", None
+                    # Try to figure out the current broadcast address of the channel
+                    # TODO(ntamas): this should be sorted out in the future
+                    old_broadcast_address = getattr(
+                        entry.channel, "broadcast_address", None
+                    )
+                    if old_broadcast_address is None:
+                        connection = getattr(entry, "connection", None)
+                        if connection:
+                            old_broadcast_address = getattr(
+                                connection, "broadcast_address", None
+                            )
+
+                    if (
+                        old_broadcast_address
+                        and isinstance(old_broadcast_address, tuple)
+                        and len(old_broadcast_address) == 2
+                    ):
+                        # Keep the port, update the address only
+                        broadcast_port = old_broadcast_address[1]
+                    else:
+                        # Hmmm, let's just assume that the source port of this packet is okay
+                        broadcast_port = port
+
+                    conn = entry.connection
+                    if isinstance(conn, BroadcastAddressOverride):
+                        conn = cast("BroadcastAddressOverride[IPAddressAndPort]", conn)
+                        conn.set_user_defined_broadcast_address(
+                            (
+                                str(broadcast_address),
+                                broadcast_port,
+                            )
                         )
-                        if old_broadcast_address is None:
-                            connection = getattr(entry, "connection", None)
-                            if connection:
-                                old_broadcast_address = getattr(
-                                    connection, "broadcast_address", None
-                                )
-
-                        if (
-                            old_broadcast_address
-                            and isinstance(old_broadcast_address, tuple)
-                            and len(old_broadcast_address) == 2
-                        ):
-                            # Keep the port, update the address only
-                            broadcast_port = old_broadcast_address[1]
-                        else:
-                            # Hmmm, let's just assume that the source port of this packet is okay
-                            broadcast_port = port
-
-                        conn = entry.connection
-                        if isinstance(conn, UDPListenerConnection):
-                            conn.set_user_defined_broadcast_address(
-                                (
-                                    str(broadcast_address),
-                                    broadcast_port,
-                                )
-                            )
-                            self.log.info(
-                                f"Broadcast address updated to {broadcast_address}:{broadcast_port} "
-                                f"({interface})",
-                                extra={"id": connection_id},
-                            )
-                            success = True
+                        self.log.info(
+                            f"Broadcast address updated to {broadcast_address}:{broadcast_port} "
+                            f"({interface})",
+                            extra={"id": connection_id},
+                        )
+                        success = True
 
         if not success:
             self.log.warning(

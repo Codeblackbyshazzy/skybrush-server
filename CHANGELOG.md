@@ -5,6 +5,116 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.49.0] - 2026-07-06
+
+### Changed
+
+- Updated protocol specification package, no visible changes for the end user.
+
+## [2.48.0] - 2026-07-05
+
+### Added
+
+- Added `timesync` extension that contains the core logic for determining whether the
+  clock of the server is in sync with the world clock. Other extensions may register
+  themselves as time sources in the `timesync` extension and submit world clock
+  timestamps or estimated offsets, while the `timesync` extension takes care of
+  maintaining a global time synchronization state and informing clients if the clock
+  seems to be not in sync with the world clock.
+
+### Changed
+
+- When MAVLink drones are waiting on the ground before a show, the start time of the
+  show has passed _and_ the current time has not reached the designated takeoff time of
+  the drone, show "Waiting for takeoff time" instead of "Coutdown to start time" in
+  the Details column in Skybrush Live to reassure the operator that the drone will
+  take off when the time comes.
+
+- Increased maximum WebSocket message size to 100 MB by default.
+
+- The `rtk` extension now uses the facilities provided by the `timesync` extension to
+  allow GPS packet timestamps to be used as world clock time estimates.
+
+### Fixed
+
+- Encoding of log files is now always UTF-8, irrespectively of the native file encoding
+  of the current platform. This is to ensure that UTF-8 characters are printed properly
+  in log files on Windows instead of dumping an error on the console.
+
+### Deprecated
+
+- In earlier versions, `SYS-MSG` messages were emitted when the server determined that
+  its local clock is probably not in sync with GPS time. These messages are now
+  deprecated and will _not_ be emitted from the next minor version. Clients should
+  update to use the newly added `TIMESYNC-STATUS` message instead, which provides more
+  detailed information about the time synchronization state of the server.
+
+## [2.47.1] - 2026-06-20
+
+### Added
+
+- Added more detailed logging to time axis configuration packets (pro edition only).
+
+### Fixed
+
+- `ClockSynchronizationHandler` was changed such that it does not stop the secondary
+  clock beyond its point of no return even if the primary clock was stopped. This
+  prevents lost MIDI timecode links from stopping the show clock when the show was
+  started based on MIDI timecode. If you want to stop the show clock in such cases,
+  clear the show start time from Skybrush Live instead. We consider this a bugfix
+  instead of a breaking change because the previous behaviour was undesired and went
+  against user expectations.
+
+## [2.47.0] - 2026-06-03
+
+### Added
+
+- Start time of the show can now be set with sub-second precision. Required for
+  accurate show starts based on MIDI timecode.
+
+## [2.46.0] - 2026-04-01
+
+### Added
+
+- It is now possible to trigger a collective RTH when the show is suspended.
+
+## [2.45.1] - 2026-03-24
+
+### Fixed
+
+- Compass-motor interference calibration now queries the `RCMAP_THROTTLE` parameter
+  to determine the RC channel index to use for adjusting the throttle during the
+  calibration.
+
+- Fixed a bug in collective RTH plan calculations where the drones were taking off
+  later than T=0. The bug affected only the part of the collective RTH plan before
+  the takeoff itself.
+
+## [2.45.0] - 2026-03-21
+
+### Changed
+
+- High ESC error rates reported by the UAV now received a new, separate error code
+  (`ESC`, numeric value: 142). Earlier versions used the "motor malfunction" error code,
+  which was misleading and also complicated the logic that updated the error codes in
+  the MAVLink extension.
+
+## [2.44.1] - 2026-03-20
+
+### Added
+
+- Added compass-motor interference calibration. This is a potentially dangerous
+  operation as it has to be performed with the propellers attached to the drone,
+  so it is not exposed to the UI of Live yet.
+
+## [2.43.0] - 2026-03-18
+
+### Changed
+
+- Refinements to the suspend, resume and collective RTH functionality, including a
+  change in the format used to store the collective RTH plan on the drone. This is
+  not considered a breaking change because the functionality is still experimental.
+
 ## [2.42.0] - 2026-02-24
 
 ### Added
