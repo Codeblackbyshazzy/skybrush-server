@@ -6,6 +6,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ContextManager, Protocol, Sequence
 
+from pydantic import BaseModel, Field
+
 from flockwave.server.model.authentication import (
     AuthenticationMethod,
     AuthenticationResult,
@@ -13,7 +15,7 @@ from flockwave.server.model.authentication import (
 from flockwave.server.model.client import Client
 from flockwave.server.registries.base import RegistryBase
 
-from .base import Extension
+from .base import TypedConfigExtension
 
 if TYPE_CHECKING:
     from flockwave.server.app import SkybrushServer
@@ -89,7 +91,21 @@ class AuthenticationMethodRegistry(RegistryBase[AuthenticationMethod]):
             self.remove(method)
 
 
-class AuthenticationExtension(Extension):
+class AuthenticationConfig(BaseModel):
+    """Configuration model for the authentication extension."""
+
+    required: bool = Field(
+        default=False,
+        title="Require authentication",
+        description=(
+            "Tick this checkbox to require users to authenticate with the "
+            "server after connection"
+        ),
+        json_schema_extra={"format": "checkbox"},
+    )
+
+
+class AuthenticationExtension(TypedConfigExtension[AuthenticationConfig]):
     """Extension that implements basic handling of authentication-related
     messages in the server.
 
@@ -105,8 +121,8 @@ class AuthenticationExtension(Extension):
 
         self._registry = AuthenticationMethodRegistry()
 
-    def configure(self, configuration: dict[str, Any]) -> None:
-        self._required = bool(configuration.get("required"))
+    def configure(self, configuration: AuthenticationConfig) -> None:
+        self._required = configuration.required
 
     def exports(self) -> dict[str, Any]:
         return {
@@ -210,13 +226,4 @@ construct = AuthenticationExtension
 description = (
     "Authentication-related message handlers and authentication method registry"
 )
-schema = {
-    "properties": {
-        "required": {
-            "type": "boolean",
-            "title": "Require authentication",
-            "description": "Tick this checkbox to require users to authenticate with the server after connection",
-            "format": "checkbox",
-        }
-    }
-}
+schema = AuthenticationConfig
