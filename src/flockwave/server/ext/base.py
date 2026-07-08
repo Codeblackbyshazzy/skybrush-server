@@ -1,4 +1,4 @@
-"""Base class for extensions."""
+"""Base classes for extensions."""
 
 from __future__ import annotations
 
@@ -6,17 +6,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from deprecated.sphinx import versionadded
-from flockwave.ext.base import ExtensionBase
+from flockwave.ext.base import ExtensionBase, TypedConfigExtensionBase
 
 if TYPE_CHECKING:
-    from flockwave.server.app import SkybrushServer  # noqa
+    from flockwave.server.app import SkybrushServer
     from flockwave.server.model.uav import UAVDriver
 
-__all__ = ("UAVExtension",)
+__all__ = (
+    "Extension",
+    "TypedConfigExtension",
+    "UAVExtension",
+)
+
+TConfig = TypeVar("TConfig")
+D = TypeVar("D", bound="UAVDriver")
 
 
-class Extension(ExtensionBase["SkybrushServer"]):
-    """Base class for extensions in the server application."""
+class _ExtensionDirectoryHelpers:
+    app: SkybrushServer | None
+    name: str
 
     @versionadded(version="2.15.0")
     def get_cache_dir(self, name: str | None = None) -> Path:
@@ -49,7 +57,19 @@ class Extension(ExtensionBase["SkybrushServer"]):
         return self.app.dirs.user_data_path / "ext" / (name or self.name or "_unnamed")
 
 
-D = TypeVar("D", bound="UAVDriver")
+class Extension(
+    ExtensionBase["SkybrushServer"],
+    _ExtensionDirectoryHelpers,
+):
+    """Base class for extensions in the server application."""
+
+
+class TypedConfigExtension(
+    Generic[TConfig],
+    TypedConfigExtensionBase["SkybrushServer", TConfig],
+    _ExtensionDirectoryHelpers,
+):
+    """Base class for server extensions with validated config models."""
 
 
 class UAVExtension(Extension, Generic[D]):
