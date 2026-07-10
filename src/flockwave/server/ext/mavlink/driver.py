@@ -16,6 +16,7 @@ from typing import Any, Sequence
 from colour import Color
 from deprecated import deprecated
 from flockwave.concurrency import FutureCancelled, delayed
+from flockwave.ext.errors import NoSuchExtension
 from flockwave.gps.time import datetime_to_gps_time_of_week, gps_time_of_week_to_utc
 from flockwave.gps.vectors import GPSCoordinate, VelocityNED
 from flockwave.spec.errors import FlockwaveErrorCode
@@ -2679,6 +2680,10 @@ class MAVLinkUAV(UAVBase[MAVLinkDriver]):
                     raise RuntimeError(
                         f"Show pro extension is not loaded, neglecting {'and'.join(pro_keys)} from the show"
                     )
+            except NoSuchExtension:
+                self.driver.log.warning(
+                    f"Show pro extension is not available, neglecting {'and'.join(pro_keys)} from the show"
+                )
             except RuntimeError as ex:
                 self.driver.log.warning(str(ex))
             else:
