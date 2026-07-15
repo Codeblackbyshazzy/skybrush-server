@@ -167,6 +167,14 @@ def create_rc_override_packet(
     """Creates a MAVLink RC override packet based on the given RC state object,
     mapping from the channel conventions used in the RCState_ instance to the ones used
     by the MAVLink RC_OVERRIDE packet.
+
+    Args:
+        state: the state of the remote controller
+        broadcast: whether the packet will be broadcast to all drones. If this is
+            `False` (the default), the generated MAVLink message specification will
+            not contain a target system or component ID and this has to be provided to
+            the specification by other means. When `broadcast` is `True`, the target
+            system and component IDs will be set to 0.
     """
     if state.lost:
         # Cancel all previous RC overrides. For channels <= 8, zero means

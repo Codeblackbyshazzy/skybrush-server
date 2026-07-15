@@ -422,7 +422,7 @@ class MAVLinkDronesExtension(UAVExtension[MAVLinkDriver]):
 
     def _on_rc_channels_changed(self, sender: RCState):
         """Handles the event when the RC channel values changed."""
-        spec = create_rc_override_packet(sender)
+        spec = create_rc_override_packet(sender, broadcast=True)
         for name, network in self._networks.items():
             try:
                 network.enqueue_rc_override_packet(spec)
