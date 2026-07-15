@@ -891,7 +891,7 @@ wheels = [
 
 [[package]]
 name = "flockwave-conn"
-version = "9.3.0"
+version = "9.3.1"
 source = { registry = "https://pypi.fury.io/skybrush/" }
 dependencies = [
     { name = "blinker" },
@@ -901,9 +901,9 @@ dependencies = [
     { name = "trio-util" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://pypi.fury.io/skybrush/-/ver_1UidZw/flockwave-conn-9.3.0.tar.gz", hash = "sha256:11b50118d456bc9e352335933d71549bd726fffbe3f75533c59ca19a3ad88790" }
+sdist = { url = "https://pypi.fury.io/skybrush/-/ver_1oISId/flockwave-conn-9.3.1.tar.gz", hash = "sha256:078fef090cd628cccf7b782b64334af09296292aafab941ad1e170fedcb28085" }
 wheels = [
-    { url = "https://pypi.fury.io/skybrush/-/ver_1mRTlR/flockwave_conn-9.3.0-py3-none-any.whl", hash = "sha256:63830fd83b7555dcd86230124679af3c0c903a96887da2c8ea0f8f1d600ecd28" },
+    { url = "https://pypi.fury.io/skybrush/-/ver_VUdFB/flockwave_conn-9.3.1-py3-none-any.whl", hash = "sha256:2a9745801e46e5fef935ddea5d21940ead51bfe50c43f246c6ad53f8f06a3057" },
 ]
 
 [package.optional-dependencies]
@@ -917,15 +917,16 @@ serial = [
 
 [[package]]
 name = "flockwave-ext"
-version = "2.1.1"
+version = "2.1.2"
 source = { registry = "https://pypi.fury.io/skybrush/" }
 dependencies = [
     { name = "blinker" },
     { name = "semver" },
     { name = "trio" },
 ]
+sdist = { url = "https://pypi.fury.io/skybrush/-/ver_TcdIv/flockwave-ext-2.1.2.tar.gz", hash = "sha256:4f0c66a1a792b5358083b429d2cae15c11c2e4b07cdac85c77762f387a8c22e9" }
 wheels = [
-    { url = "https://pypi.fury.io/skybrush/-/ver_1qs16Q/flockwave_ext-2.1.1-py3-none-any.whl", hash = "sha256:a639520f20181e66d14ce1ebde719f4f34ec958bdb093c6bb755f431c026544e" },
+    { url = "https://pypi.fury.io/skybrush/-/ver_o2q8g/flockwave_ext-2.1.2-py3-none-any.whl", hash = "sha256:5a69b99b3e8738296843e4ba8ec097102212808db143a4a62460eac93c1bd7f2" },
 ]
 
 [[package]]
@@ -1140,8 +1141,8 @@ requires-dist = [
     { name = "fastjsonschema", specifier = ">=2.21.1,<3.0.0" },
     { name = "flockwave-app-framework", extras = ["daemon"], specifier = ">=3.6.0,<4.0.0", index = "https://pypi.fury.io/skybrush/" },
     { name = "flockwave-async", specifier = ">=3.0.0,<4.0.0", index = "https://pypi.fury.io/skybrush/" },
-    { name = "flockwave-conn", extras = ["rpc", "serial"], specifier = ">=9.3.0,<10.0.0", index = "https://pypi.fury.io/skybrush/" },
-    { name = "flockwave-ext", specifier = ">=2.1.1,<3.0.0", index = "https://pypi.fury.io/skybrush/" },
+    { name = "flockwave-conn", extras = ["rpc", "serial"], specifier = ">=9.3.1,<10.0.0", index = "https://pypi.fury.io/skybrush/" },
+    { name = "flockwave-ext", specifier = ">=2.1.2,<3.0.0", index = "https://pypi.fury.io/skybrush/" },
     { name = "flockwave-flockctrl", marker = "extra == 'collmot'", specifier = ">=4.0.0", index = "https://pypi.collmot.com/" },
     { name = "flockwave-gps", specifier = ">=5.0.1,<6.0.0", index = "https://pypi.fury.io/skybrush/" },
     { name = "flockwave-logger", specifier = ">=3.0.0,<4.0.0", index = "https://pypi.fury.io/skybrush/" },
